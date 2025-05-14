@@ -2,11 +2,26 @@ import cv2
 from PIL import Image
 import imutils
 import numpy as np
-import easyocr
 import re
 import os
 import requests
 import streamlit as st
+import time
+
+# Create a loading indicator for the easyocr import
+with st.spinner('Loading EasyOCR module... This might take a minute.'):
+    try:
+        import easyocr
+        st.success('EasyOCR loaded successfully!')
+    except ImportError:
+        st.error('Failed to import EasyOCR. Please make sure it\'s installed correctly.')
+        st.info('Running: pip install easyocr')
+        os.system('pip install easyocr')
+        try:
+            import easyocr
+            st.success('EasyOCR installed and loaded successfully!')
+        except ImportError:
+            st.error('Failed to install EasyOCR. The app may not function properly.')
 
 # Supabase credentials - consider using environment variables for these
 SUPABASE_URL = "https://nyfaluazyaribgfqryxy.supabase.co"
@@ -31,6 +46,15 @@ def insert_data_to_supabase(plate, city):
         return True, response.json()
     except requests.exceptions.RequestException as e:
         return False, str(e)
+
+@st.cache_data
+def load_easyocr_reader():
+    """Load the EasyOCR reader with caching to improve performance"""
+    try:
+        return easyocr.Reader(['en','th'])
+    except Exception as e:
+        st.error(f"Error loading EasyOCR reader: {str(e)}")
+        return None
 
 def process_image(image):
     try:
@@ -66,7 +90,11 @@ def process_image(image):
         (x2, y2) = (np.max(x), np.max(y))
         cropped_image = gray[x1:x2+1, y1:y2+1]
 
-        reader = easyocr.Reader(['en','th']) 
+        # Get the cached reader or load it if not available
+        reader = load_easyocr_reader()
+        if reader is None:
+            return {"error": "Failed to initialize EasyOCR. Please try again."}
+            
         text = reader.readtext(cropped_image, detail = 0)
 
         text_str = ' '.join(text)
